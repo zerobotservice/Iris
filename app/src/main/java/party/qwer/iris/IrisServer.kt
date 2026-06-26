@@ -38,7 +38,6 @@ import party.qwer.iris.model.QueryResponse
 import party.qwer.iris.model.ReplyRequest
 import party.qwer.iris.model.ReplyType
 
-
 class IrisServer(
     private val kakaoDB: KakaoDB,
     private val dbObserver: DBObserver,
@@ -111,45 +110,30 @@ class IrisServer(
                         when (name) {
                             "endpoint" -> {
                                 var value = req.endpoint
-                                if (value == null) {
-                                    value = ""
-                                }
+                                if (value == null) value = ""
                                 Configurable.webServerEndpoint = value
                             }
-
                             "botname" -> {
                                 val value = req.botname
-                                if (value.isNullOrBlank()) {
-                                    throw Exception("missing or empty value")
-                                }
+                                if (value.isNullOrBlank()) throw Exception("missing or empty value")
                                 Configurable.botName = value
                             }
-
                             "dbrate" -> {
                                 val value = req.rate ?: throw Exception("missing or invalid value")
-
                                 Configurable.dbPollingRate = value
                             }
-
                             "sendrate" -> {
                                 val value = req.rate ?: throw Exception("missing or invalid value")
-
                                 Configurable.messageSendRate = value
                             }
-
                             "botport" -> {
                                 val value = req.port ?: throw Exception("missing or invalid value")
-
                                 if (value < 1 || value > 65535) {
                                     throw Exception("Invalid port number. Port must be between 1 and 65535.")
                                 }
-
                                 Configurable.botSocketPort = value
                             }
-
-                            else -> {
-                                throw Exception("Unknown config $name")
-                            }
+                            else -> throw Exception("Unknown config $name")
                         }
 
                         call.respond(ApiResponse(success = true, message = "success"))
@@ -158,7 +142,6 @@ class IrisServer(
 
                 get("/aot") {
                     val aotToken = AuthProvider.getToken()
-
                     call.respond(
                         AotResponse(
                             success = true,
@@ -173,20 +156,26 @@ class IrisServer(
                     val threadId = replyRequest.threadId?.toLong()
 
                     when (replyRequest.type) {
-                        ReplyType.TEXT -> Replier.sendMessage(
-                            notificationReferer,
-                            roomId,
-                            replyRequest.data.jsonPrimitive.content,
-                            threadId
-                        )
-
+                        ReplyType.TEXT -> {
+                            val msg = replyRequest.data.jsonPrimitive.content
+                            if (!replyRequest.mentions.isNullOrEmpty()) {
+                                Replier.sendMention(
+                                    notificationReferer,
+                                    roomId,
+                                    msg,
+                                    replyRequest.mentions,
+                                    threadId
+                                )
+                            } else {
+                                Replier.sendMessage(notificationReferer, roomId, msg, threadId)
+                            }
+                        }
                         ReplyType.IMAGE -> Replier.sendPhoto(
                             roomId, replyRequest.data.jsonPrimitive.content
                         )
-
                         ReplyType.IMAGE_MULTIPLE -> Replier.sendMultiplePhotos(
-                            roomId,
-                            replyRequest.data.jsonArray.map { it.jsonPrimitive.content })
+                            roomId, replyRequest.data.jsonArray.map { it.jsonPrimitive.content }
+                        )
                     }
 
                     call.respond(ApiResponse(success = true, message = "success"))
@@ -194,12 +183,11 @@ class IrisServer(
 
                 post("/query") {
                     val queryRequest = call.receive<QueryRequest>()
-
                     try {
                         val rows = kakaoDB.executeQuery(
                             queryRequest.query,
-                            (queryRequest.bind?.map { it.content } ?: listOf()).toTypedArray())
-
+                            (queryRequest.bind?.map { it.content } ?: listOf()).toTypedArray()
+                        )
                         call.respond(QueryResponse(data = rows.map {
                             KakaoDB.decryptRow(it)
                         }))
@@ -215,7 +203,6 @@ class IrisServer(
                         decryptRequest.b64_ciphertext,
                         decryptRequest.user_id ?: Configurable.botId
                     )
-
                     call.respond(DecryptResponse(plain_text = plaintext))
                 }
 
