@@ -221,3 +221,6 @@ class Replier {
                 data = uri
             }
             AndroidHiddenApi.broadcastIntent(mediaScanIntent)
+        }
+    }
+}
