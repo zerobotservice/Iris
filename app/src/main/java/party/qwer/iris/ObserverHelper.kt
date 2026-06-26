@@ -68,9 +68,9 @@ class ObserverHelper(
                         var supplement = "{}"
                         try {
                             supplement = cursor.getString(columnNames.indexOf("supplement"))
-                            if(supplement.isNotEmpty() && supplement != "{}")
+                            if (supplement.isNotEmpty() && supplement != "{}")
                                 supplement = KakaoDecrypt.decrypt(enc, supplement, userId)
-                        } catch(_: Exception) {}
+                        } catch (_: Exception) {}
 
                         try {
                             if (message.isNotEmpty() && message != "{}") message =
@@ -83,8 +83,7 @@ class ObserverHelper(
                             if ((message.contains("선물") && messageType == "71") or (attachment == null)) {
                                 attachment = "{}"
                             } else if (attachment.isNotEmpty() && attachment != "{}") {
-                                attachment =
-                                    KakaoDecrypt.decrypt(enc, attachment, userId)
+                                attachment = KakaoDecrypt.decrypt(enc, attachment, userId)
                             }
                         } catch (e: Exception) {
                             println("failed to decrypt attachment: $e")
@@ -123,12 +122,28 @@ class ObserverHelper(
                             advancedPlainSerialized["attachment"]!!["src_logId"] =
                                 advancedPlainSerialized["supplement"]!!.getOrDefault("threadId", "")
                             advancedPlainSerialized["attachment"]!!["src_isThread"] = true
-                        } else if(threadId != null && messageType == "1") {
+                        } else if (threadId != null && messageType == "1") {
                             advancedPlainSerialized["attachment"]!!["src_logId"] = threadId.toLong()
                             advancedPlainSerialized["attachment"]!!["src_isThread"] = true
                         }
 
                         raw["attachment"] = JSONObject(advancedPlainSerialized["attachment"]!!).toString()
+
+                        // ── 멘션 파싱 ──────────────────────────────────────────
+                        val mentionUserIds = mutableListOf<Long>()
+                        try {
+                            val attachmentJson = JSONObject(raw["attachment"] ?: "{}")
+                            if (attachmentJson.has("mentions")) {
+                                val mentions = attachmentJson.getJSONArray("mentions")
+                                for (i in 0 until mentions.length()) {
+                                    mentionUserIds.add(mentions.getJSONObject(i).getLong("user_id"))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            println("failed to parse mentions: $e")
+                        }
+                        val isMentioned = Configurable.botId != 0L && mentionUserIds.contains(Configurable.botId)
+                        // ───────────────────────────────────────────────────────
 
                         val chatInfo = db.getChatInfo(chatId, userId)
                         var roomName = chatInfo[0]
@@ -154,10 +169,12 @@ class ObserverHelper(
 
                         val data = JSONObject(
                             mapOf(
-                                "msg" to message,
-                                "room" to roomName,
-                                "sender" to senderName,
-                                "json" to raw
+                                "msg"          to message,
+                                "room"         to roomName,
+                                "sender"       to senderName,
+                                "json"         to raw,
+                                "mentions"     to mentionUserIds.map { it.toString() },
+                                "is_mentioned" to isMentioned
                             )
                         ).toString()
 
@@ -182,7 +199,7 @@ class ObserverHelper(
     }
 
     private fun getStringJsonToMap(data: String?): MutableMap<String, Any?> {
-        if(data == null) return HashMap()
+        if (data == null) return HashMap()
         val object_ = JSONObject(data)
         val map: MutableMap<String, Any?> = HashMap()
 
