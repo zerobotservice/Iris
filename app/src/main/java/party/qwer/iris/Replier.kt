@@ -15,10 +15,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONArray
+import org.json.JSONObject
+import party.qwer.iris.model.MentionItem
 import party.qwer.iris.Replier.Companion.SendMessageRequest
 import java.io.File
-
-// SendMsg : ye-seola/go-kdb
 
 class Replier {
     companion object {
@@ -86,23 +87,74 @@ class Replier {
             AndroidHiddenApi.startService(intent)
         }
 
+        private fun sendMentionInternal(
+            referer: String,
+            chatId: Long,
+            msg: String,
+            mentions: List<MentionItem>,
+            threadId: Long?
+        ) {
+            val mentionJson = JSONArray().apply {
+                for (m in mentions) {
+                    put(JSONObject().apply {
+                        put("user_id", m.user_id)
+                        put("at", JSONArray(m.at))
+                        put("len", m.len)
+                    })
+                }
+            }
+            val attachmentJson = JSONObject().apply {
+                put("mentions", mentionJson)
+            }.toString()
+
+            val intent = Intent().apply {
+                component = ComponentName(
+                    "com.kakao.talk", "com.kakao.talk.notification.NotificationActionService"
+                )
+                putExtra("noti_referer", referer)
+                putExtra("chat_id", chatId)
+                putExtra("is_chat_thread_notification", threadId != null)
+                if (threadId != null) putExtra("thread_id", threadId)
+                action = "com.kakao.talk.notification.REPLY_MESSAGE"
+
+                val results = Bundle().apply {
+                    putCharSequence("reply_message", msg)
+                    putCharSequence("reply_attachment", attachmentJson)
+                }
+
+                val remoteInput = RemoteInput.Builder("reply_message").build()
+                RemoteInput.addResultsToIntent(arrayOf(remoteInput), this, results)
+            }
+
+            AndroidHiddenApi.startService(intent)
+        }
+
         fun sendMessage(referer: String, chatId: Long, msg: String, threadId: Long?) {
             coroutineScope.launch {
                 messageChannel.send(SendMessageRequest {
-                    sendMessageInternal(
-                        referer, chatId, msg, threadId
-                    )
+                    sendMessageInternal(referer, chatId, msg, threadId)
                 })
             }
         }
 
+        fun sendMention(
+            referer: String,
+            chatId: Long,
+            msg: String,
+            mentions: List<MentionItem>,
+            threadId: Long?
+        ) {
+            coroutineScope.launch {
+                messageChannel.send(SendMessageRequest {
+                    sendMentionInternal(referer, chatId, msg, mentions, threadId)
+                })
+            }
+        }
 
         fun sendPhoto(room: Long, base64ImageDataString: String) {
             coroutineScope.launch {
                 messageChannel.send(SendMessageRequest {
-                    sendPhotoInternal(
-                        room, base64ImageDataString
-                    )
+                    sendPhotoInternal(room, base64ImageDataString)
                 })
             }
         }
@@ -110,9 +162,7 @@ class Replier {
         fun sendMultiplePhotos(room: Long, base64ImageDataStrings: List<String>) {
             coroutineScope.launch {
                 messageChannel.send(SendMessageRequest {
-                    sendMultiplePhotosInternal(
-                        room, base64ImageDataStrings
-                    )
+                    sendMultiplePhotosInternal(room, base64ImageDataStrings)
                 })
             }
         }
@@ -123,9 +173,7 @@ class Replier {
 
         private fun sendMultiplePhotosInternal(room: Long, base64ImageDataStrings: List<String>) {
             val picDir = File(IMAGE_DIR_PATH).apply {
-                if (!exists()) {
-                    mkdirs()
-                }
+                if (!exists()) mkdirs()
             }
 
             val uris = base64ImageDataStrings.mapIndexed { idx, base64ImageDataString ->
@@ -164,7 +212,6 @@ class Replier {
             }
         }
 
-
         internal fun interface SendMessageRequest {
             suspend fun send()
         }
@@ -174,6 +221,3 @@ class Replier {
                 data = uri
             }
             AndroidHiddenApi.broadcastIntent(mediaScanIntent)
-        }
-    }
-}
