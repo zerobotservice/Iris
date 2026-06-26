@@ -9,4 +9,12 @@ data class ReplyRequest(
     val room: String,
     val data: JsonElement,
     val threadId: String? = null,
+    val mentions: List<MentionItem>? = null,
+)
+
+@Serializable
+data class MentionItem(
+    val user_id: Long,
+    val at: List<Int>,
+    val len: Int,
 )
