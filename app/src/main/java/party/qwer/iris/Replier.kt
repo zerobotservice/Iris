@@ -114,22 +114,23 @@ class Replier {
                 }
             }
 
-            // fallback: reply_message + reply_attachment 둘 다 RemoteInput에 등록
+            // fallback: extras에 직접 attachment 삽입
             println("알림 없음, fallback 방식으로 멘션 전송 시도")
             val intent = Intent().apply {
                 component = ComponentName("com.kakao.talk", "com.kakao.talk.notification.NotificationActionService")
+                action = "com.kakao.talk.notification.REPLY_MESSAGE"
                 putExtra("noti_referer", referer)
                 putExtra("chat_id", chatId)
                 putExtra("is_chat_thread_notification", threadId != null)
                 if (threadId != null) putExtra("thread_id", threadId)
-                action = "com.kakao.talk.notification.REPLY_MESSAGE"
+
+                // reply_attachment를 extras에 직접 추가
+                putExtra("reply_attachment", attachmentJson)
 
                 val results = Bundle().apply {
                     putCharSequence("reply_message", msg)
                     putCharSequence("reply_attachment", attachmentJson)
                 }
-
-                // reply_message, reply_attachment 둘 다 RemoteInput 키로 등록
                 val remoteInputMessage = RemoteInput.Builder("reply_message").build()
                 val remoteInputAttachment = RemoteInput.Builder("reply_attachment").build()
                 RemoteInput.addResultsToIntent(
