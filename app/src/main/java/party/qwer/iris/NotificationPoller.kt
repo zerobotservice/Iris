@@ -13,6 +13,7 @@ class NotificationPoller {
     private val processedNotifications = mutableMapOf<String, Long>()
 
     fun startPolling() {
+        instance = this
         thread(start = true) {
             while (true) {
                 try {
@@ -27,21 +28,16 @@ class NotificationPoller {
 
     private fun pollNotifications() {
         val sbns = getActiveNotifications()
-
         val currentActiveKeys = mutableSetOf<String>()
 
         for (sbn in sbns) {
             if (sbn.packageName != "com.kakao.talk") continue
-
             val key = sbn.key
             val postTime = sbn.postTime
             currentActiveKeys.add(key)
 
             val lastProcessedTime = processedNotifications[key]
-
-            if (lastProcessedTime == postTime) {
-                continue
-            }
+            if (lastProcessedTime == postTime) continue
 
             val notification = sbn.notification
             val extras = notification.extras ?: continue
@@ -74,27 +70,21 @@ class NotificationPoller {
                         if (person != null) senderId = person.key ?: ""
                     }
                 }
-            } catch (e: Exception) {
-                // pass
-            }
+            } catch (e: Exception) {}
 
             processedNotifications[key] = postTime
 
             if (senderId.isNotEmpty() && !cachedSenderIds.contains(senderId)) {
-                // Assuming NamesDB is implemented elsewhere
                 NamesDB.saveName(senderId, senderName, room)
                 cachedSenderIds.add(senderId)
             }
         }
 
         processedNotifications.keys.retainAll(currentActiveKeys)
-
-        if (cachedSenderIds.size > 5000) {
-            cachedSenderIds.clear()
-        }
+        if (cachedSenderIds.size > 5000) cachedSenderIds.clear()
     }
 
-    private fun getActiveNotifications(): Array<StatusBarNotification> {
+    internal fun getActiveNotifications(): Array<StatusBarNotification> {
         try {
             val serviceManager = Class.forName("android.os.ServiceManager")
             val getService = serviceManager.getMethod("getService", String::class.java)
@@ -102,15 +92,12 @@ class NotificationPoller {
 
             val stub = Class.forName("android.app.INotificationManager\$Stub")
             val inpm = stub.getMethod("asInterface", IBinder::class.java).invoke(null, binder)
-
             val methods = inpm.javaClass.methods
 
             val userId = try {
                 val userHandleClass = Class.forName("android.os.UserHandle")
                 userHandleClass.getMethod("myUserId").invoke(null) as Int
-            } catch (e: Exception) {
-                0
-            }
+            } catch (e: Exception) { 0 }
 
             try {
                 val getActiveMethod = methods.find {
@@ -121,9 +108,7 @@ class NotificationPoller {
                     val notifications = extractNotifications(result)
                     if (notifications.isNotEmpty()) return notifications
                 }
-            } catch (e: Exception) {
-                // pass
-            }
+            } catch (e: Exception) {}
 
             try {
                 val getAppActiveMethod = methods.find {
@@ -134,9 +119,7 @@ class NotificationPoller {
                     val notifications = extractNotifications(result)
                     if (notifications.isNotEmpty()) return notifications
                 }
-            } catch (e: Exception) {
-                // pass
-            }
+            } catch (e: Exception) {}
 
             try {
                 val getActiveMethod = methods.find {
@@ -147,9 +130,7 @@ class NotificationPoller {
                     val notifications = extractNotifications(result)
                     if (notifications.isNotEmpty()) return notifications
                 }
-            } catch (e: Exception) {
-                // pass
-            }
+            } catch (e: Exception) {}
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -159,21 +140,20 @@ class NotificationPoller {
 
     private fun extractNotifications(result: Any?): Array<StatusBarNotification> {
         if (result == null) return emptyArray()
-
-        if (result is Array<*>) {
-            return result.filterIsInstance<StatusBarNotification>().toTypedArray()
-        }
-
+        if (result is Array<*>) return result.filterIsInstance<StatusBarNotification>().toTypedArray()
         try {
             val getListMethod = result.javaClass.getMethod("getList")
             val list = getListMethod.invoke(result) as? List<*>
-            if (list != null) {
-                return list.filterIsInstance<StatusBarNotification>().toTypedArray()
-            }
-        } catch (e: Exception) {
-            // pass
-        }
-
+            if (list != null) return list.filterIsInstance<StatusBarNotification>().toTypedArray()
+        } catch (e: Exception) {}
         return emptyArray()
+    }
+
+    companion object {
+        private var instance: NotificationPoller? = null
+
+        fun getActiveNotificationsStatic(): Array<StatusBarNotification> {
+            return instance?.getActiveNotifications() ?: emptyArray()
+        }
     }
 }
